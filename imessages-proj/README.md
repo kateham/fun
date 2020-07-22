@@ -1,4 +1,4 @@
-# iMessages Project Project
+# iMessages Project
 
 This is my (first!) personal Python project for a gift to my partner for our second anniversary in mid-2019 - a quick website to host a random iMessage text from the past two years. She loved it! :)
 

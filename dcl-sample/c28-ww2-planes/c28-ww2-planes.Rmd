@@ -1,0 +1,139 @@
+---
+title: "World War II Airplanes"
+authors: "Kate Ham"
+date: "`r Sys.Date()`"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+# knitr options
+knitr::opts_chunk$set(echo = TRUE, out.width = "100%")
+```
+
+```{r message=FALSE, warning=FALSE}
+# Libraries
+library(tidyverse)
+library(dcl)
+library(rvest)
+
+# Parameters
+  # URL for data
+url_data <- "https://www.ibiblio.org/hyperwar/AAF/StatDigest/aafsd-3.html"
+  # File with answers
+file_answers <- "../../data/ww2-planes/answers.rds"
+
+#===============================================================================
+# Read in answers
+answers <- read_rds(file_answers)
+```
+
+__q1__ During World War II, the US Army Air Force procured over 60 different models of airplane to fight the war. The Air Technical Service Command, Budget and Fiscal Office kept track of the average unit cost of each model over time. These costs can be seen in:
+
+* Army Air Forces, Office of Statistical Control. Army Air Force Statistical Digest: World War II, 1945. [Table 82, page 134](https://archive.org/details/ArmyAirForcesStatisticalDigestWorldWarII/page/n151).
+
+To better read the table, there is a button to zoom in.
+
+__q1.1__ Using rvest, read in the data from this [HTML table](https://www.ibiblio.org/hyperwar/AAF/StatDigest/aafsd-3.html#t82).
+
+Note: The web page for the table uses HTML 3.2 (specification released 1997-01-14). rvest was designed to parse HTML 4.0 (specification released 1997-12-18) and later. In particular, on the web page the table (`<table>` ... `</table>`) is placed inside a paragraph (`<p>` ... `</p>`), which is not allowed in HTML 4.0 and later. The CSS selector returned by Chrome will show the table as a child of the paragraph. The parser used by rvest will close the paragraph when it encounters the table, so it will not be a child of the paragraph, but rather on the same level as the paragraph as a sibling. Your selector for rvest will need to match how it parses the HTML.
+
+(Hint: In a CSS selector, ">" indicates a child node.)
+
+```{r}
+q1.1 <- 
+  url_data %>% 
+  read_html() %>% 
+  html_node(css = "body > blockquote:nth-child(93) > table") %>% 
+  html_table() %>% 
+  as_tibble()
+
+# Compare result with answer
+if (exists("q1.1")) compare(answers$q1.1, q1.1)
+```
+
+__q1.2__ Tidy the data in `q1.1` so that it has the following variables:
+
+* `model`: i.e. B-17, P-51
+* `type`: i.e. Heavy Bombers, Fighters
+* `period`: i.e. 1939 - 1941, 1942
+* `cost`
+
+Sort by `type`, `model`, and `period`.
+
+```{r warning=FALSE, message=FALSE}
+q1.2 <-   
+  q1.1 %>% 
+  mutate(
+    model = if_else(str_detect(`Type and Model`, pattern = "\\d"), `Type and Model`, NA_character_),
+    type = if_else(str_detect(`Type and Model`, pattern = "\\d"), NA_character_, `Type and Model`)
+  ) %>% 
+  fill(type, .direction = "down") %>% 
+  pivot_longer(
+    cols = starts_with('19'),
+    names_to = "period",
+    values_to = "cost"
+  ) %>% 
+  filter(!is.na(model), str_detect(cost, pattern = "\\d")) %>% 
+  transmute(
+    model,
+    type,
+    period,
+    cost = parse_number(cost) %>% as.double()
+  ) %>% 
+  arrange(type, model, period)
+
+# Print results
+if (exists("q1.2")) q1.2
+
+# Compare result with answer
+if (exists("q1.2")) compare(answers$q1.2, q1.2)
+```
+
+__q2__ Create at presentation-quality visualization that shows the percentage change in cost over time of each bomber and fighter. It should be clear from your visualization:
+
+* The bombers and fighters that were produced in 1945, the last year of the war.
+* Which bomber had the greatest cost decrease by the end of the war.
+* Which fighter had the greatest cost decrease by the end of the war.
+* Which group, bombers or fighters, had the greatest decrease.
+
+(Hint: You can add space to the plot area in a discrete dimension with `scale_*_discrete()`.)
+
+Interpret your plot.
+
+<!-- Use following chunk for plot. -->
+
+```{r, q2}
+q1.2 %>% 
+  filter(str_detect(type, "[Ff]ighter") | str_detect(type, "[Bb]omber")) %>% 
+  mutate(type = if_else(str_detect(type, "[Bb]omber"), "Bombers", type)) %>% 
+  group_by(model) %>% 
+  arrange(period) %>% 
+  mutate(per_delta = (cost - cost[1]) / cost[1]) %>% 
+  ggplot() +
+  geom_line(aes(period, per_delta, group = model, color = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  ggrepel::geom_text_repel(
+    aes(label = model, x = period,y = per_delta),
+    data = . %>% group_by(type) %>% top_n(-1, wt = per_delta),
+    direction = "y",
+    nudge_y = -0.1,
+    nudge_x = -0.1,
+    size = 3
+  ) +
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) +
+  facet_wrap(~ type, nrow = 1) +
+  labs(
+    title = "Unit Cost of Airplanes in the U.S.",
+    caption = "Source: Air Technical Service Command, Budget and Fiscal Office",
+    x = NULL,
+    y = "Change in Unit Cost (from 1939 - 1941)",
+    color = "Airplane Model"
+  ) +
+  theme_light()
+```
+
+
+
+After you finish this task, please complete [Notes on Task - Part 1](https://forms.gle/NdSN5Tye6EtMiXAm8).
